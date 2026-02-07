@@ -258,7 +258,7 @@ My name is Jiya and I am a passionate reader who loves books and would love to r
 
 <p class="main-text">{{msg}}</p>
 
-<p class="main-text"><i><b>Happy Reading!</b></i></p>
+<p class="happy"><i><b>Happy Reading!</b></i></p>
 </div>
 
 </body>
