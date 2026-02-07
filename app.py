@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, session, render_template_string
 import os
 import hashlib
 import sqlite3
@@ -17,14 +17,17 @@ app.secret_key = "change_this_later"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def get_db():
+    # Use PostgreSQL only if DATABASE_URL exists AND psycopg2 is installed
     if DATABASE_URL and POSTGRES_AVAILABLE:
         return psycopg2.connect(DATABASE_URL)
-    return sqlite3.connect("users.db")
+    else:
+        return sqlite3.connect("users.db")
 
 def init_db():
     conn = get_db()
     cur = conn.cursor()
 
+    # SQLite vs PostgreSQL compatible table creation
     if DATABASE_URL and POSTGRES_AVAILABLE:
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -68,14 +71,24 @@ def home():
             if DATABASE_URL and POSTGRES_AVAILABLE:
                 cur.execute(
                     "INSERT INTO users (name, age, gender, email, password) VALUES (%s,%s,%s,%s,%s)",
-                    (request.form["name"], request.form["age"], request.form["gender"],
-                     request.form["email"], password)
+                    (
+                        request.form["name"],
+                        request.form["age"],
+                        request.form["gender"],
+                        request.form["email"],
+                        password
+                    )
                 )
             else:
                 cur.execute(
                     "INSERT INTO users (name, age, gender, email, password) VALUES (?,?,?,?,?)",
-                    (request.form["name"], request.form["age"], request.form["gender"],
-                     request.form["email"], password)
+                    (
+                        request.form["name"],
+                        request.form["age"],
+                        request.form["gender"],
+                        request.form["email"],
+                        password
+                    )
                 )
 
             conn.commit()
@@ -98,9 +111,15 @@ def home():
     --text: #FF914D;
     --accent: #ffde59;
 }
+.light {
+    --bg: #f5f5f5;
+    --box: #ffffff;
+    --text: #333;
+    --accent: #ff914d;
+}
 
 body {
-    background-image: url("/static/Book1.jpg");
+    background-image: url("/static/Book2.png");
     font-family: cursive;
     text-align: center;
 }
@@ -111,32 +130,19 @@ body {
     padding: 40px;
     background: var(--box);
     border-radius: 20px;
-    border: 4px solid #ffde59;
+    border: 4px solid transparent;
     animation: borderGlow 6s infinite linear;
+    box-shadow: 0 0 35px rgba(255,255,255,0.3);
 }
 
 @keyframes borderGlow {
-    0% {
-        border-color: #ffde59;
-        box-shadow: 0 0 15px #ffde59, 0 0 30px rgba(255,222,89,0.6);
-    }
-    33% {
-        border-color: #ff914d;
-        box-shadow: 0 0 18px #ff914d, 0 0 36px rgba(255,145,77,0.6);
-    }
-    66% {
-        border-color: #b84dff;
-        box-shadow: 0 0 18px #b84dff, 0 0 36px rgba(184,77,255,0.6);
-    }
-    100% {
-        border-color: #ffde59;
-        box-shadow: 0 0 15px #ffde59, 0 0 30px rgba(255,222,89,0.6);
-    }
+    0% { border-color: #ffde59; }
+    33% { border-color: #ff914d; }
+    66% { border-color: #b84dff; }
+    100% { border-color: #ffde59; }
 }
 
-form {
-    text-align: left;
-}
+form { text-align: left; }
 
 .field {
     position: relative;
@@ -198,26 +204,29 @@ button:hover {
     100% { box-shadow: 0 0 10px #ffde59; }
 }
 
-.main-text {
-    color: var(--text);
-    font-size: 22px;
-}
-
-.happy {
-    color: var(--text);
-    font-size: 26px;
-    margin-top: 30px;
-    text-shadow: 0 0 10px rgba(255,145,77,0.6);
+.toggle {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    cursor: pointer;
+    color: var(--accent);
 }
 </style>
+
+<script>
+function toggleTheme() {
+    document.body.classList.toggle("light");
+}
+</script>
 </head>
 
 <body>
+<div class="toggle" onclick="toggleTheme()">Toggle Theme</div>
 
 <div class="text-box">
 <img src="/static/J.png">
 
-<p class="main-text">
+<p style="color:var(--text);">
 Hello everyone and welcome to <b><i>Jiya's Reading Diary</i></b>!
 My name is Jiya and I am a passionate reader who loves books and would love to recommend some for you!
 </p>
@@ -256,11 +265,9 @@ My name is Jiya and I am a passionate reader who loves books and would love to r
 <button type="submit">Let's Get Started!</button>
 </form>
 
-<p class="main-text">{{msg}}</p>
-
-<p class="happy"><i><b>Happy Reading!</b></i></p>
+<p style="color:var(--text);">{{msg}}</p>
+<p><i><b>Happy Reading!</b></i></p>
 </div>
-
 </body>
 </html>
 """, msg=msg)
