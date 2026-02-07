@@ -201,7 +201,7 @@ def render_page(title, content, msg):
 }}
 
 body {{
-    background-image: url("/static/Book2.png");
+    background-image: url("/static/Book1.jpg");
     font-family: cursive;
     text-align: center;
 }}
