@@ -1,208 +1,224 @@
-from flask import Flask, render_template_string, request
+from flask import Flask, request, redirect, url_for, session, render_template_string
 import sqlite3
 import os
+import hashlib
 
 app = Flask(__name__)
-DATABASE = "users.db"
+app.secret_key = "super_secret_key_change_later"
 
-
-def get_db_connection():
-    conn = sqlite3.connect(DATABASE)
+# ---------- DATABASE SETUP ----------
+def get_db():
+    conn = sqlite3.connect("users.db")
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def init_db():
-    conn = get_db_connection()
+    conn = get_db()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             age INTEGER NOT NULL,
             gender TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
         )
     """)
     conn.commit()
     conn.close()
 
+init_db()
 
+# ---------- HOME / SIGN UP ----------
 @app.route("/", methods=["GET", "POST"])
 def home():
-    user_created = False
-    user_name = ""
+    message = ""
 
     if request.method == "POST":
-        name = request.form.get("name")
-        age = request.form.get("age")
-        gender = request.form.get("gender")
-        email = request.form.get("email")
+        name = request.form["name"]
+        age = request.form["age"]
+        gender = request.form["gender"]
+        email = request.form["email"]
+        password = hashlib.sha256(request.form["password"].encode()).hexdigest()
 
-        conn = get_db_connection()
         try:
+            conn = get_db()
             conn.execute(
-                "INSERT INTO users (name, age, gender, email) VALUES (?, ?, ?, ?)",
-                (name, age, gender, email)
+                "INSERT INTO users (name, age, gender, email, password) VALUES (?, ?, ?, ?, ?)",
+                (name, age, gender, email, password)
             )
             conn.commit()
-            user_created = True
-            user_name = name
-        except sqlite3.IntegrityError:
-            user_created = False
-        finally:
             conn.close()
+            message = "Account created successfully! You can now log in."
+        except sqlite3.IntegrityError:
+            message = "An account with this email already exists."
 
-    html_code = """
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Jiya's Reading Diary</title>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    return render_template_string("""
+<!DOCTYPE html>
+<html>
+<head>
+<title>Jiya's Reading Diary</title>
+<style>
+body {
+    background-image: url("/static/Book1.jpg");
+    text-align: center;
+    font-family: cursive;
+}
+.text-box {
+    border: 3px solid #ffde59;
+    padding: 40px;
+    margin: 40px auto;
+    background-color: #33003D;
+    width: 900px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px #ffde59;
+}
+input, select {
+    padding: 10px;
+    margin: 8px;
+    width: 60%;
+}
+button {
+    background-color: #ffde59;
+    border: none;
+    padding: 15px 30px;
+    font-size: 16px;
+    border-radius: 15px;
+    cursor: pointer;
+}
+p { color: #FF914D; font-size: 20px; }
+a { color: #ffde59; }
+</style>
+</head>
 
-        <style>
-          body {
-            background-image: url("/static/Book2.png");
-            background-size: cover;
-            background-repeat: no-repeat;
-            background-position: center;
-            text-align: center;
-          }
+<body>
+<div class="text-box">
+<img src="/static/J.png" alt="Logo">
 
-          @keyframes glowBorder {
-            0% { border-color: #ffde59; box-shadow: 0 0 12px #ffde59; }
-            33% { border-color: #ff914d; box-shadow: 0 0 20px 4px #ff914d; }
-            66% { border-color: #a200ff; box-shadow: 0 0 20px 4px #a200ff; }
-            100% { border-color: #ffde59; box-shadow: 0 0 12px #ffde59; }
-          }
+<p>
+Hello everyone and welcome to <b><i>Jiya's Reading Diary</i></b>!
+My name is Jiya and I am a passionate reader who loves books and would love to recommend some for you!
+</p>
 
-          .text-box {
-            border: 3px solid #ffde59;
-            padding: 45px;
-            margin: 60px auto;
-            background-color: #33003D;
-            width: 900px;
-            font-family: cursive;
-            border-radius: 10px;
-            animation: glowBorder 4.5s infinite ease-in-out;
-          }
+<h2 style="color:#ffde59;">Create an Account</h2>
 
-          .logo {
-            margin-bottom: 20px;
-            max-width: 100%;
-            height: auto;
-          }
+<form method="post">
+<input name="name" placeholder="Name" required><br>
+<input name="age" type="number" placeholder="Age" required><br>
+<select name="gender" required>
+<option value="">Select Gender</option>
+<option>Female</option>
+<option>Male</option>
+<option>Other</option>
+</select><br>
+<input name="email" type="email" placeholder="Email" required><br>
+<input name="password" type="password" placeholder="Password" required><br>
+<button type="submit">Let's Get Started!</button>
+</form>
 
-          p {
-            color: #FF914D;
-            font-size: 22px;
-            text-align: left;
-          }
+<p>{{message}}</p>
 
-          .form-group {
-            margin: 15px 0;
-            text-align: left;
-          }
+<p><a href="/login">Already have an account? Log in</a></p>
 
-          label {
-            color: #ffde59;
-            font-size: 18px;
-          }
+<br><br>
+<p><i><b>Happy Reading!</b></i></p>
+</div>
+</body>
+</html>
+""", message=message)
 
-          input, select {
-            width: 100%;
-            padding: 10px;
-            margin-top: 5px;
-            border-radius: 8px;
-            border: none;
-            font-size: 16px;
-          }
+# ---------- LOGIN ----------
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = ""
 
-          .glow-button {
-            margin-top: 25px;
-            padding: 15px 30px;
-            font-size: 20px;
-            font-family: cursive;
-            color: #33003D;
-            background-color: #ffde59;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-            box-shadow: 0 0 10px #ffde59;
-          }
+    if request.method == "POST":
+        email = request.form["email"]
+        password = hashlib.sha256(request.form["password"].encode()).hexdigest()
 
-          .success {
-            margin-top: 25px;
-            color: #ffde59;
-            font-size: 22px;
-          }
-        </style>
-      </head>
+        conn = get_db()
+        user = conn.execute(
+            "SELECT * FROM users WHERE email = ? AND password = ?",
+            (email, password)
+        ).fetchone()
+        conn.close()
 
-      <body>
-        <div class="text-box">
-          <img src="{{ url_for('static', filename='J.png') }}" class="logo">
+        if user:
+            session["user_id"] = user["id"]
+            return redirect(url_for("profile"))
+        else:
+            error = "Invalid email or password."
 
-          <p>
-            Hello everyone and welcome to <b><i>Jiya's Reading Diary</i></b>!
-            My name is Jiya and I am a passionate reader who loves books and would love to recommend some for you!
-          </p>
+    return render_template_string("""
+<html>
+<head>
+<title>Login</title>
+<style>
+body { background-color:#33003D; text-align:center; font-family:cursive; }
+.text-box { margin:100px auto; padding:40px; width:500px; background:#22002A; border-radius:15px; box-shadow:0 0 20px #ffde59; }
+input { padding:10px; margin:10px; width:80%; }
+button { padding:12px 25px; background:#ffde59; border:none; border-radius:15px; }
+p { color:#FF914D; }
+</style>
+</head>
+<body>
+<div class="text-box">
+<h2 style="color:#ffde59;">Login</h2>
+<form method="post">
+<input name="email" type="email" placeholder="Email" required><br>
+<input name="password" type="password" placeholder="Password" required><br>
+<button type="submit">Login</button>
+</form>
+<p>{{error}}</p>
+</div>
+</body>
+</html>
+""", error=error)
 
-          <br><br>
+# ---------- PROFILE ----------
+@app.route("/profile")
+def profile():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
 
-          <form method="POST">
-            <div class="form-group">
-              <label>Name</label>
-              <input type="text" name="name" required>
-            </div>
+    conn = get_db()
+    user = conn.execute(
+        "SELECT * FROM users WHERE id = ?",
+        (session["user_id"],)
+    ).fetchone()
+    conn.close()
 
-            <div class="form-group">
-              <label>Age</label>
-              <input type="number" name="age" required>
-            </div>
+    return render_template_string("""
+<html>
+<head>
+<title>Your Profile</title>
+<style>
+body { background-color:#33003D; text-align:center; font-family:cursive; }
+.text-box { margin:100px auto; padding:40px; width:600px; background:#22002A; border-radius:15px; box-shadow:0 0 25px #ffde59; }
+p { color:#FF914D; font-size:20px; }
+a { color:#ffde59; }
+</style>
+</head>
+<body>
+<div class="text-box">
+<h2 style="color:#ffde59;">Welcome, {{user["name"]}}!</h2>
+<p>Age: {{user["age"]}}</p>
+<p>Gender: {{user["gender"]}}</p>
+<p>Email: {{user["email"]}}</p>
 
-            <div class="form-group">
-              <label>Gender</label>
-              <select name="gender" required>
-                <option value="">Select</option>
-                <option>Female</option>
-                <option>Male</option>
-                <option>Other</option>
-                <option>Prefer not to say</option>
-              </select>
-            </div>
+<p><a href="/logout">Logout</a></p>
+</div>
+</body>
+</html>
+""", user=user)
 
-            <div class="form-group">
-              <label>Email</label>
-              <input type="email" name="email" required>
-            </div>
+# ---------- LOGOUT ----------
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("home"))
 
-            <button type="submit" class="glow-button">
-              Let's Get Started!
-            </button>
-          </form>
-
-          {% if user_created %}
-            <div class="success">
-              Account created successfully for {{ user_name }}!
-            </div>
-          {% endif %}
-
-          <p><i><b>Happy Reading!</b></i></p>
-        </div>
-      </body>
-    </html>
-    """
-
-    return render_template_string(
-        html_code,
-        user_created=user_created,
-        user_name=user_name
-    )
-
-
+# ---------- RUN ----------
 if __name__ == "__main__":
-    init_db()
-
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
