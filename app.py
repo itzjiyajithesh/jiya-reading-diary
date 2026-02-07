@@ -89,7 +89,13 @@ def signup():
         except Exception:
             msg = "Email already exists."
 
-    return render_page("Create Account", signup_form(), msg)
+    # Example image and text before and after form
+    pre_content = '<img src="/static/Book2.png" alt="Book" style="width:200px;"><p>Fill in your details to create an account:</p>'
+    post_content = '<p>Already a member? Use the login link below.</p>'
+
+    full_content = f"{pre_content}<div id='form-wrapper'>{signup_form()}</div>{post_content}"
+
+    return render_page("Create Account", full_content, msg)
 
 # ---------------- LOGIN ----------------
 @app.route("/login", methods=["GET", "POST"])
@@ -116,7 +122,9 @@ def login():
         else:
             msg = "Invalid login details."
 
-    return render_page("Login", login_form(), msg)
+    pre_content = '<p>Login with your email and password:</p>'
+    full_content = f"<div id='form-wrapper'>{login_form()}</div>"
+    return render_page("Login", pre_content + full_content, msg)
 
 # ---------------- PROFILE ----------------
 @app.route("/profile")
@@ -250,20 +258,17 @@ button:hover {{
     animation: flicker 1.5s infinite, fadeOut 3s ease-in 0.5s forwards;
 }}
 
-/* Flicker effect */
 @keyframes flicker {{
     0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {{ opacity: 1; }}
     20%, 22%, 24%, 55% {{ opacity: 0.4; }}
 }}
 
-/* Fade out success message */
 @keyframes fadeOut {{
     0% {{ opacity: 1; }}
     100% {{ opacity: 0; }}
 }}
 
-/* Smooth form fade out */
-#form-container.fade-out {{
+#form-wrapper.fade-out {{
     opacity: 0;
     transition: opacity 2s ease-in-out;
 }}
@@ -276,21 +281,31 @@ button:hover {{
 
 {"<p id='success-msg' class='success'>Account created successfully!</p>" if success else ""}
 
-<div id="form-container">
 {content}
-</div>
 
 <p style="color:var(--text);">{msg}</p>
 </div>
 
 <script>
-// Smoothly hide form if success
+// Smoothly hide form if success, then remove from DOM
 const successMsg = document.getElementById("success-msg");
 if(successMsg){{
-    const formContainer = document.getElementById("form-container");
-    setTimeout(() => {{
-        if(formContainer) formContainer.classList.add("fade-out");
-    }}, 500); // start fading after 0.5s
+    const formWrapper = document.getElementById("form-wrapper");
+    if(formWrapper){{
+        setTimeout(() => {{
+            formWrapper.classList.add("fade-out");
+
+            // Remove from DOM after fade completes
+            setTimeout(() => {{
+                formWrapper.remove();
+            }}, 2000); // matches CSS transition duration
+        }}, 500); // start fading after 0.5s
+    }}
+
+    // Remove success message from DOM after fade
+    successMsg.addEventListener('animationend', () => {{
+        successMsg.remove();
+    }});
 }}
 </script>
 </body>
