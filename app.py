@@ -1,9 +1,9 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, redirect, url_for, session
 import os
 import hashlib
 import sqlite3
 
-# Try PostgreSQL only if available
+# Optional PostgreSQL
 try:
     import psycopg2
     POSTGRES_AVAILABLE = True
@@ -13,9 +13,9 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = "change_this_later"
 
-# ---------------- DATABASE ----------------
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# ---------------- DATABASE ----------------
 def get_db():
     if DATABASE_URL and POSTGRES_AVAILABLE:
         return psycopg2.connect(DATABASE_URL)
@@ -33,7 +33,8 @@ def init_db():
                 age INTEGER,
                 gender TEXT,
                 email TEXT UNIQUE,
-                password TEXT
+                password TEXT,
+                theme TEXT DEFAULT 'dark'
             )
         """)
     else:
@@ -44,7 +45,8 @@ def init_db():
                 age INTEGER,
                 gender TEXT,
                 email TEXT UNIQUE,
-                password TEXT
+                password TEXT,
+                theme TEXT DEFAULT 'dark'
             )
         """)
 
@@ -53,9 +55,9 @@ def init_db():
 
 init_db()
 
-# ---------------- HOME / SIGNUP ----------------
+# ---------------- SIGNUP ----------------
 @app.route("/", methods=["GET", "POST"])
-def home():
+def signup():
     msg = ""
 
     if request.method == "POST":
@@ -65,205 +67,230 @@ def home():
             conn = get_db()
             cur = conn.cursor()
 
-            if DATABASE_URL and POSTGRES_AVAILABLE:
-                cur.execute(
-                    "INSERT INTO users (name, age, gender, email, password) VALUES (%s,%s,%s,%s,%s)",
-                    (request.form["name"], request.form["age"], request.form["gender"],
-                     request.form["email"], password)
-                )
-            else:
-                cur.execute(
-                    "INSERT INTO users (name, age, gender, email, password) VALUES (?,?,?,?,?)",
-                    (request.form["name"], request.form["age"], request.form["gender"],
-                     request.form["email"], password)
-                )
+            query = "INSERT INTO users (name, age, gender, email, password) VALUES (?,?,?,?,?)"
+            values = (
+                request.form["name"],
+                request.form["age"],
+                request.form["gender"],
+                request.form["email"],
+                password
+            )
 
+            if DATABASE_URL and POSTGRES_AVAILABLE:
+                query = query.replace("?", "%s")
+
+            cur.execute(query, values)
             conn.commit()
             conn.close()
-            msg = "Account created successfully!"
+
+            session["success"] = True
+            return redirect(url_for("login"))
 
         except Exception:
             msg = "Email already exists."
 
-    return render_template_string("""
+    return render_page("Create Account", signup_form(), msg)
+
+# ---------------- LOGIN ----------------
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    msg = ""
+
+    if request.method == "POST":
+        password = hashlib.sha256(request.form["password"].encode()).hexdigest()
+        conn = get_db()
+        cur = conn.cursor()
+
+        query = "SELECT id, theme FROM users WHERE email=? AND password=?"
+        if DATABASE_URL and POSTGRES_AVAILABLE:
+            query = query.replace("?", "%s")
+
+        cur.execute(query, (request.form["email"], password))
+        user = cur.fetchone()
+        conn.close()
+
+        if user:
+            session["user_id"] = user[0]
+            session["theme"] = user[1]
+            return redirect(url_for("profile"))
+        else:
+            msg = "Invalid login details."
+
+    return render_page("Login", login_form(), msg)
+
+# ---------------- PROFILE ----------------
+@app.route("/profile")
+def profile():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    query = "SELECT name, age, gender, email FROM users WHERE id=?"
+    if DATABASE_URL and POSTGRES_AVAILABLE:
+        query = query.replace("?", "%s")
+
+    cur.execute(query, (session["user_id"],))
+    user = cur.fetchone()
+    conn.close()
+
+    return render_page(
+        "Profile",
+        f"""
+        <h2>Welcome, {user[0]}!</h2>
+        <p>Age: {user[1]}</p>
+        <p>Gender: {user[2]}</p>
+        <p>Email: {user[3]}</p>
+        <a href="/toggle-theme">Toggle Theme</a><br><br>
+        <a href="/logout">Logout</a>
+        """,
+        ""
+    )
+
+# ---------------- THEME TOGGLE ----------------
+@app.route("/toggle-theme")
+def toggle_theme():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    new_theme = "light" if session.get("theme") == "dark" else "dark"
+    session["theme"] = new_theme
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    query = "UPDATE users SET theme=? WHERE id=?"
+    if DATABASE_URL and POSTGRES_AVAILABLE:
+        query = query.replace("?", "%s")
+
+    cur.execute(query, (new_theme, session["user_id"]))
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("profile"))
+
+# ---------------- LOGOUT ----------------
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+# ---------------- UI TEMPLATES ----------------
+def render_page(title, content, msg):
+    theme = session.get("theme", "dark")
+    success = session.pop("success", False)
+
+    return render_template_string(f"""
 <!DOCTYPE html>
 <html>
 <head>
-<title>Jiya's Reading Diary</title>
-
+<title>{title}</title>
 <style>
-:root {
+:root {{
     --bg: #33003D;
     --box: #22002A;
     --text: #FF914D;
     --accent: #ffde59;
-}
+}}
+.light {{
+    --bg: #f5f5f5;
+    --box: #ffffff;
+    --text: #333;
+    --accent: #ff914d;
+}}
 
-body {
+body {{
     background-image: url("/static/Book2.png");
     font-family: cursive;
     text-align: center;
-}
+}}
 
-.text-box {
-    width: 900px;
-    margin: 40px auto;
+.text-box {{
+    width: 600px;
+    margin: 50px auto;
     padding: 40px;
     background: var(--box);
     border-radius: 20px;
-    border: 4px solid #ffde59;
-    animation: borderGlow 6s infinite linear;
-}
+    border: 4px solid var(--accent);
+    animation: glow 6s infinite;
+}}
 
-@keyframes borderGlow {
-    0% {
-        border-color: #ffde59;
-        box-shadow: 0 0 15px #ffde59, 0 0 30px rgba(255,222,89,0.6);
-    }
-    33% {
-        border-color: #ff914d;
-        box-shadow: 0 0 18px #ff914d, 0 0 36px rgba(255,145,77,0.6);
-    }
-    66% {
-        border-color: #b84dff;
-        box-shadow: 0 0 18px #b84dff, 0 0 36px rgba(184,77,255,0.6);
-    }
-    100% {
-        border-color: #ffde59;
-        box-shadow: 0 0 15px #ffde59, 0 0 30px rgba(255,222,89,0.6);
-    }
-}
+@keyframes glow {{
+    0% {{ box-shadow: 0 0 15px var(--accent); }}
+    50% {{ box-shadow: 0 0 35px var(--text); }}
+    100% {{ box-shadow: 0 0 15px var(--accent); }}
+}}
 
-form {
-    text-align: left;
-}
-
-.field {
-    position: relative;
-    margin-bottom: 25px;
-}
-
-.field input, .field select {
+input {{
     width: 100%;
-    padding: 14px;
-    background: #4b005a;
-    border: 2px solid var(--accent);
-    border-radius: 12px;
-    color: var(--accent);
-    font-size: 16px;
-}
+    padding: 12px;
+    margin: 10px 0;
+    border-radius: 10px;
+    border: none;
+}}
 
-.field label {
-    position: absolute;
-    top: 50%;
-    left: 14px;
-    color: var(--accent);
-    font-size: 14px;
-    pointer-events: none;
-    transform: translateY(-50%);
-    transition: 0.3s;
-    background: var(--box);
-    padding: 0 6px;
-}
-
-.field input:focus + label,
-.field input:not(:placeholder-shown) + label,
-.field select:focus + label {
-    top: -8px;
-    font-size: 12px;
-}
-
-.field input:focus {
-    box-shadow: 0 0 15px var(--accent);
-}
-
-button {
+button {{
+    padding: 14px 30px;
+    border-radius: 20px;
     background: var(--accent);
     border: none;
-    padding: 16px 40px;
-    border-radius: 20px;
-    font-size: 18px;
     cursor: pointer;
-    animation: buttonGlow 3s infinite;
     transition: transform 0.3s;
-}
+}}
 
-button:hover {
+button:hover {{
     transform: scale(1.1);
-}
+}}
 
-@keyframes buttonGlow {
-    0% { box-shadow: 0 0 10px #ffde59; }
-    50% { box-shadow: 0 0 25px #ff914d; }
-    100% { box-shadow: 0 0 10px #ffde59; }
-}
-
-.main-text {
-    color: var(--text);
+.success {{
+    color: var(--accent);
     font-size: 22px;
-}
+    animation: fadeIn 1.5s ease-in;
+}}
 
-.happy {
-    color: var(--text);
-    font-size: 26px;
-    margin-top: 30px;
-    text-shadow: 0 0 10px rgba(255,145,77,0.6);
-}
+@keyframes fadeIn {{
+    from {{ opacity: 0; }}
+    to {{ opacity: 1; }}
+}}
 </style>
 </head>
 
-<body>
-
+<body class="{theme}">
 <div class="text-box">
-<img src="/static/J.png">
+<h1>{title}</h1>
 
-<p class="main-text">
-Hello everyone and welcome to <b><i>Jiya's Reading Diary</i></b>!
-My name is Jiya and I am a passionate reader who loves books and would love to recommend some for you!
-</p>
+{"<p class='success'>Account created successfully!</p>" if success else ""}
 
-<form method="post">
-<div class="field">
-<input name="name" required placeholder=" ">
-<label>Name</label>
+{content}
+
+<p style="color:var(--text);">{msg}</p>
 </div>
-
-<div class="field">
-<input type="number" name="age" required placeholder=" ">
-<label>Age</label>
-</div>
-
-<div class="field">
-<select name="gender" required>
-<option></option>
-<option>Female</option>
-<option>Male</option>
-<option>Other</option>
-</select>
-<label>Gender</label>
-</div>
-
-<div class="field">
-<input type="email" name="email" required placeholder=" ">
-<label>Email</label>
-</div>
-
-<div class="field">
-<input type="password" name="password" required placeholder=" ">
-<label>Password</label>
-</div>
-
-<button type="submit">Let's Get Started!</button>
-</form>
-
-<p class="main-text">{{msg}}</p>
-
-<p class="happy"><i><b>Happy Reading!</b></i></p>
-</div>
-
 </body>
 </html>
-""", msg=msg)
+""")
+
+def signup_form():
+    return """
+<form method="post">
+<input name="name" placeholder="Name" required>
+<input name="age" type="number" placeholder="Age" required>
+<input name="gender" placeholder="Gender" required>
+<input name="email" type="email" placeholder="Email" required>
+<input name="password" type="password" placeholder="Password" required>
+<button>Create Account</button>
+</form>
+<a href="/login">Already have an account? Login</a>
+"""
+
+def login_form():
+    return """
+<form method="post">
+<input name="email" type="email" placeholder="Email" required>
+<input name="password" type="password" placeholder="Password" required>
+<button>Login</button>
+</form>
+"""
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
