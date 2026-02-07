@@ -201,7 +201,7 @@ def render_page(title, content, msg):
 }}
 
 body {{
-    background-image: url("/static/Book2.png");
+    background-image: url("/static/Book2.png"); 
     font-family: cursive;
     text-align: center;
 }}
@@ -246,12 +246,26 @@ button:hover {{
 .success {{
     color: var(--accent);
     font-size: 22px;
-    animation: fadeIn 1.5s ease-in;
+    opacity: 1;
+    animation: flicker 1.5s infinite, fadeOut 3s ease-in 0.5s forwards;
 }}
 
-@keyframes fadeIn {{
-    from {{ opacity: 0; }}
-    to {{ opacity: 1; }}
+/* Flicker effect */
+@keyframes flicker {{
+    0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {{ opacity: 1; }}
+    20%, 22%, 24%, 55% {{ opacity: 0.4; }}
+}}
+
+/* Fade out success message */
+@keyframes fadeOut {{
+    0% {{ opacity: 1; }}
+    100% {{ opacity: 0; }}
+}}
+
+/* Smooth form fade out */
+#form-container.fade-out {{
+    opacity: 0;
+    transition: opacity 2s ease-in-out;
 }}
 </style>
 </head>
@@ -260,12 +274,25 @@ button:hover {{
 <div class="text-box">
 <h1>{title}</h1>
 
-{"<p class='success'>Account created successfully!</p>" if success else ""}
+{"<p id='success-msg' class='success'>Account created successfully!</p>" if success else ""}
 
+<div id="form-container">
 {content}
+</div>
 
 <p style="color:var(--text);">{msg}</p>
 </div>
+
+<script>
+// Smoothly hide form if success
+const successMsg = document.getElementById("success-msg");
+if(successMsg){{
+    const formContainer = document.getElementById("form-container");
+    setTimeout(() => {{
+        if(formContainer) formContainer.classList.add("fade-out");
+    }}, 500); // start fading after 0.5s
+}}
+</script>
 </body>
 </html>
 """)
