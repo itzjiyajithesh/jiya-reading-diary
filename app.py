@@ -1,65 +1,123 @@
-from flask import Flask, request, redirect, url_for, session, render_template_string
-import sqlite3
+from flask import Flask, request, session, render_template_string
 import os
 import hashlib
+import sqlite3
+
+# Try PostgreSQL only if available
+try:
+    import psycopg2
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
 
 app = Flask(__name__)
-app.secret_key = "super_secret_key_change_later"
+app.secret_key = "change_this_later"
 
-# ---------- DATABASE ----------
+# ---------------- DATABASE ----------------
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
 def get_db():
-    conn = sqlite3.connect("users.db")
-    conn.row_factory = sqlite3.Row
-    return conn
+    # Use PostgreSQL only if DATABASE_URL exists AND psycopg2 is installed
+    if DATABASE_URL and POSTGRES_AVAILABLE:
+        return psycopg2.connect(DATABASE_URL)
+    else:
+        return sqlite3.connect("users.db")
 
 def init_db():
     conn = get_db()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            age INTEGER,
-            gender TEXT,
-            email TEXT UNIQUE,
-            password TEXT
-        )
-    """)
+    cur = conn.cursor()
+
+    # SQLite vs PostgreSQL compatible table creation
+    if DATABASE_URL and POSTGRES_AVAILABLE:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name TEXT,
+                age INTEGER,
+                gender TEXT,
+                email TEXT UNIQUE,
+                password TEXT
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                age INTEGER,
+                gender TEXT,
+                email TEXT UNIQUE,
+                password TEXT
+            )
+        """)
+
     conn.commit()
     conn.close()
 
 init_db()
 
-# ---------- HOME / SIGN UP ----------
+# ---------------- HOME / SIGNUP ----------------
 @app.route("/", methods=["GET", "POST"])
 def home():
-    message = ""
+    msg = ""
 
     if request.method == "POST":
+        password = hashlib.sha256(request.form["password"].encode()).hexdigest()
+
         try:
-            password_hash = hashlib.sha256(request.form["password"].encode()).hexdigest()
             conn = get_db()
-            conn.execute(
-                "INSERT INTO users (name, age, gender, email, password) VALUES (?, ?, ?, ?, ?)",
-                (
-                    request.form["name"],
-                    request.form["age"],
-                    request.form["gender"],
-                    request.form["email"],
-                    password_hash
+            cur = conn.cursor()
+
+            if DATABASE_URL and POSTGRES_AVAILABLE:
+                cur.execute(
+                    "INSERT INTO users (name, age, gender, email, password) VALUES (%s,%s,%s,%s,%s)",
+                    (
+                        request.form["name"],
+                        request.form["age"],
+                        request.form["gender"],
+                        request.form["email"],
+                        password
+                    )
                 )
-            )
+            else:
+                cur.execute(
+                    "INSERT INTO users (name, age, gender, email, password) VALUES (?,?,?,?,?)",
+                    (
+                        request.form["name"],
+                        request.form["age"],
+                        request.form["gender"],
+                        request.form["email"],
+                        password
+                    )
+                )
+
             conn.commit()
             conn.close()
-            message = "Account created successfully! You can now log in."
-        except sqlite3.IntegrityError:
-            message = "This email already has an account."
+            msg = "Account created successfully!"
+
+        except Exception:
+            msg = "Email already exists."
 
     return render_template_string("""
 <!DOCTYPE html>
 <html>
 <head>
 <title>Jiya's Reading Diary</title>
+
 <style>
+:root {
+    --bg: #33003D;
+    --box: #22002A;
+    --text: #FF914D;
+    --accent: #ffde59;
+}
+.light {
+    --bg: #f5f5f5;
+    --box: #ffffff;
+    --text: #333;
+    --accent: #ff914d;
+}
+
 body {
     background-image: url("/static/Book1.jpg");
     font-family: cursive;
@@ -70,240 +128,151 @@ body {
     width: 900px;
     margin: 40px auto;
     padding: 40px;
-    background-color: #33003D;
-    border-radius: 18px;
-    border: 3px solid #ffde59;
-    box-shadow: 0 0 25px rgba(255, 222, 89, 0.7);
+    background: var(--box);
+    border-radius: 20px;
+    border: 4px solid transparent;
+    animation: borderGlow 6s infinite linear;
+    box-shadow: 0 0 35px rgba(255,255,255,0.3);
 }
 
-form {
-    text-align: left;
-    margin-top: 30px;
+@keyframes borderGlow {
+    0% { border-color: #ffde59; }
+    33% { border-color: #ff914d; }
+    66% { border-color: #b84dff; }
+    100% { border-color: #ffde59; }
 }
 
-label {
-    color: #ffde59;
-    font-size: 18px;
+form { text-align: left; }
+
+.field {
+    position: relative;
+    margin-bottom: 25px;
 }
 
-input, select {
+.field input, .field select {
     width: 100%;
-    padding: 12px;
-    margin-top: 6px;
-    margin-bottom: 16px;
-    background-color: #4b005a;
-    border: 2px solid #ffde59;
-    color: #ffde59;
+    padding: 14px;
+    background: #4b005a;
+    border: 2px solid var(--accent);
     border-radius: 12px;
+    color: var(--accent);
     font-size: 16px;
 }
 
-input::placeholder {
-    color: #ffde59aa;
+.field label {
+    position: absolute;
+    top: 50%;
+    left: 14px;
+    color: var(--accent);
+    font-size: 14px;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: 0.3s;
+    background: var(--box);
+    padding: 0 6px;
+}
+
+.field input:focus + label,
+.field input:not(:placeholder-shown) + label,
+.field select:focus + label {
+    top: -8px;
+    font-size: 12px;
+}
+
+.field input:focus {
+    box-shadow: 0 0 15px var(--accent);
 }
 
 button {
-    display: block;
-    margin: 30px auto;
-    background-color: #ffde59;
-    color: #33003D;
+    background: var(--accent);
     border: none;
-    padding: 15px 35px;
+    padding: 16px 40px;
+    border-radius: 20px;
     font-size: 18px;
-    border-radius: 18px;
     cursor: pointer;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    box-shadow: 0 0 12px rgba(255, 222, 89, 0.8);
+    animation: buttonGlow 3s infinite;
+    transition: transform 0.3s;
 }
 
 button:hover {
-    transform: scale(1.08);
-    box-shadow: 0 0 25px rgba(255, 222, 89, 1);
+    transform: scale(1.1);
 }
 
-@keyframes glowShift {
-    0% { box-shadow: 0 0 12px #ffde59; }
-    50% { box-shadow: 0 0 22px #ff914d; }
-    100% { box-shadow: 0 0 12px #ffde59; }
+@keyframes buttonGlow {
+    0% { box-shadow: 0 0 10px #ffde59; }
+    50% { box-shadow: 0 0 25px #ff914d; }
+    100% { box-shadow: 0 0 10px #ffde59; }
 }
 
-button {
-    animation: glowShift 3s infinite;
-}
-
-p {
-    color: #FF914D;
-    font-size: 20px;
-}
-
-a {
-    color: #ffde59;
+.toggle {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    cursor: pointer;
+    color: var(--accent);
 }
 </style>
+
+<script>
+function toggleTheme() {
+    document.body.classList.toggle("light");
+}
+</script>
 </head>
 
 <body>
-<div class="text-box">
-<img src="/static/J.png" alt="Logo">
+<div class="toggle" onclick="toggleTheme()">Toggle Theme</div>
 
-<p>
+<div class="text-box">
+<img src="/static/J.png">
+
+<p style="color:var(--text);">
 Hello everyone and welcome to <b><i>Jiya's Reading Diary</i></b>!
 My name is Jiya and I am a passionate reader who loves books and would love to recommend some for you!
 </p>
 
-<h2 style="color:#ffde59;">Create an Account</h2>
-
 <form method="post">
+<div class="field">
+<input name="name" required placeholder=" ">
 <label>Name</label>
-<input name="name" placeholder="Your name" required>
+</div>
 
+<div class="field">
+<input type="number" name="age" required placeholder=" ">
 <label>Age</label>
-<input type="number" name="age" placeholder="Your age" required>
+</div>
 
-<label>Gender</label>
+<div class="field">
 <select name="gender" required>
-<option value="">Select</option>
+<option></option>
 <option>Female</option>
 <option>Male</option>
 <option>Other</option>
 </select>
+<label>Gender</label>
+</div>
 
+<div class="field">
+<input type="email" name="email" required placeholder=" ">
 <label>Email</label>
-<input type="email" name="email" placeholder="Your email" required>
+</div>
 
+<div class="field">
+<input type="password" name="password" required placeholder=" ">
 <label>Password</label>
-<input type="password" name="password" placeholder="Create a password" required>
+</div>
 
 <button type="submit">Let's Get Started!</button>
 </form>
 
-<p>{{message}}</p>
-
-<p><a href="/login">Already have an account? Log in</a></p>
-
-<br><br>
+<p style="color:var(--text);">{{msg}}</p>
 <p><i><b>Happy Reading!</b></i></p>
 </div>
 </body>
 </html>
-""", message=message)
+""", msg=msg)
 
-# ---------- LOGIN ----------
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    error = ""
-    if request.method == "POST":
-        password_hash = hashlib.sha256(request.form["password"].encode()).hexdigest()
-        conn = get_db()
-        user = conn.execute(
-            "SELECT * FROM users WHERE email=? AND password=?",
-            (request.form["email"], password_hash)
-        ).fetchone()
-        conn.close()
-
-        if user:
-            session["user_id"] = user["id"]
-            return redirect(url_for("profile"))
-        else:
-            error = "Invalid email or password."
-
-    return render_template_string("""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Login</title>
-<style>
-body { background:#33003D; font-family:cursive; text-align:center; }
-.box {
-    width: 450px;
-    margin: 120px auto;
-    padding: 40px;
-    background:#22002A;
-    border-radius: 18px;
-    box-shadow: 0 0 25px #ffde59;
-}
-input {
-    width:100%;
-    padding:12px;
-    margin:12px 0;
-    background:#4b005a;
-    border:2px solid #ffde59;
-    color:#ffde59;
-    border-radius:12px;
-}
-button {
-    background:#ffde59;
-    border:none;
-    padding:14px 30px;
-    border-radius:16px;
-    font-size:16px;
-    cursor:pointer;
-}
-p { color:#FF914D; }
-</style>
-</head>
-<body>
-<div class="box">
-<h2 style="color:#ffde59;">Login</h2>
-<form method="post">
-<input name="email" type="email" placeholder="Email" required>
-<input name="password" type="password" placeholder="Password" required>
-<button type="submit">Login</button>
-</form>
-<p>{{error}}</p>
-</div>
-</body>
-</html>
-""", error=error)
-
-# ---------- PROFILE ----------
-@app.route("/profile")
-def profile():
-    if "user_id" not in session:
-        return redirect(url_for("login"))
-
-    conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE id=?", (session["user_id"],)).fetchone()
-    conn.close()
-
-    return render_template_string("""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Profile</title>
-<style>
-body { background:#33003D; font-family:cursive; text-align:center; }
-.box {
-    width:500px;
-    margin:120px auto;
-    padding:40px;
-    background:#22002A;
-    border-radius:18px;
-    box-shadow:0 0 25px #ffde59;
-}
-p { color:#FF914D; font-size:20px; }
-a { color:#ffde59; }
-</style>
-</head>
-<body>
-<div class="box">
-<h2 style="color:#ffde59;">Welcome, {{user["name"]}}!</h2>
-<p>Age: {{user["age"]}}</p>
-<p>Gender: {{user["gender"]}}</p>
-<p>Email: {{user["email"]}}</p>
-<p><a href="/logout">Logout</a></p>
-</div>
-</body>
-</html>
-""", user=user)
-
-# ---------- LOGOUT ----------
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("home"))
-
-# ---------- RUN ----------
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
