@@ -89,13 +89,7 @@ def signup():
         except Exception:
             msg = "Email already exists."
 
-    # Example image and text before and after form
-    pre_content = '<img src="/static/Book2.png" alt="Book" style="width:200px;"><p>Fill in your details to create an account:</p>'
-    post_content = '<p>Already a member? Use the login link below.</p>'
-
-    full_content = f"{pre_content}<div id='form-wrapper'>{signup_form()}</div>{post_content}"
-
-    return render_page("Create Account", full_content, msg)
+    return render_page("Create Account", signup_form(), msg)
 
 # ---------------- LOGIN ----------------
 @app.route("/login", methods=["GET", "POST"])
@@ -122,9 +116,7 @@ def login():
         else:
             msg = "Invalid login details."
 
-    pre_content = '<p>Login with your email and password:</p>'
-    full_content = f"<div id='form-wrapper'>{login_form()}</div>"
-    return render_page("Login", pre_content + full_content, msg)
+    return render_page("Login", login_form(), msg)
 
 # ---------------- PROFILE ----------------
 @app.route("/profile")
@@ -209,7 +201,7 @@ def render_page(title, content, msg):
 }}
 
 body {{
-    background-image: url("/static/Book2.png"); 
+    background-image: url("/static/Book2.png");
     font-family: cursive;
     text-align: center;
 }}
@@ -254,23 +246,12 @@ button:hover {{
 .success {{
     color: var(--accent);
     font-size: 22px;
-    opacity: 1;
-    animation: flicker 1.5s infinite, fadeOut 3s ease-in 0.5s forwards;
+    animation: fadeIn 1.5s ease-in;
 }}
 
-@keyframes flicker {{
-    0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {{ opacity: 1; }}
-    20%, 22%, 24%, 55% {{ opacity: 0.4; }}
-}}
-
-@keyframes fadeOut {{
-    0% {{ opacity: 1; }}
-    100% {{ opacity: 0; }}
-}}
-
-#form-wrapper.fade-out {{
-    opacity: 0;
-    transition: opacity 2s ease-in-out;
+@keyframes fadeIn {{
+    from {{ opacity: 0; }}
+    to {{ opacity: 1; }}
 }}
 </style>
 </head>
@@ -279,35 +260,12 @@ button:hover {{
 <div class="text-box">
 <h1>{title}</h1>
 
-{"<p id='success-msg' class='success'>Account created successfully!</p>" if success else ""}
+{"<p class='success'>Account created successfully!</p>" if success else ""}
 
 {content}
 
 <p style="color:var(--text);">{msg}</p>
 </div>
-
-<script>
-// Smoothly hide form if success, then remove from DOM
-const successMsg = document.getElementById("success-msg");
-if(successMsg){{
-    const formWrapper = document.getElementById("form-wrapper");
-    if(formWrapper){{
-        setTimeout(() => {{
-            formWrapper.classList.add("fade-out");
-
-            // Remove from DOM after fade completes
-            setTimeout(() => {{
-                formWrapper.remove();
-            }}, 2000); // matches CSS transition duration
-        }}, 500); // start fading after 0.5s
-    }}
-
-    // Remove success message from DOM after fade
-    successMsg.addEventListener('animationend', () => {{
-        successMsg.remove();
-    }});
-}}
-</script>
 </body>
 </html>
 """)
