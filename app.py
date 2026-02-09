@@ -100,7 +100,7 @@ def home():
 }
 
 body {
-    background-image: url("/static/Book1.jpg");
+    background-image: url("/static/Book2.png");
     font-family: cursive;
     text-align: center;
 }
