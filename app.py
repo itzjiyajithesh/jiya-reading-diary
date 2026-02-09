@@ -1,31 +1,28 @@
 from flask import Flask, request, redirect, url_for, session, render_template_string
-import os, hashlib, sqlite3, smtplib
+import os, sqlite3, hashlib, smtplib, uuid
 from email.message import EmailMessage
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
+app.secret_key = os.environ.get("SECRET_KEY", "dev")
 
 # ---------------- DATABASE ----------------
-DATABASE = "users.db"
+DB = "users.db"
 
-def get_db():
-    return sqlite3.connect(DATABASE)
+def db():
+    return sqlite3.connect(DB)
 
-def migrate_db():
-    conn = get_db()
-    cur = conn.cursor()
+def migrate():
+    con = db()
+    cur = con.cursor()
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
-        age INTEGER,
-        gender TEXT,
         email TEXT UNIQUE,
         password TEXT,
-        theme TEXT DEFAULT 'dark',
         avatar TEXT,
-        verified INTEGER DEFAULT 0
+        theme TEXT DEFAULT 'dark'
     )
     """)
 
@@ -34,18 +31,23 @@ def migrate_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         genre TEXT,
-        book_title TEXT,
-        cover_url TEXT,
-        rating INTEGER
+        entry TEXT
     )
     """)
 
-    conn.commit()
-    conn.close()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS reset_tokens (
+        email TEXT,
+        token TEXT
+    )
+    """)
 
-migrate_db()
+    con.commit()
+    con.close()
 
-# ---------------- EMAIL ----------------
+migrate()
+
+# ---------------- EMAIL (UPDATED FOR OUTLOOK SMTP) ----------------
 def send_email(to, subject, body):
     msg = EmailMessage()
     msg["From"] = os.environ["EMAIL_ADDRESS"]
@@ -53,182 +55,217 @@ def send_email(to, subject, body):
     msg["Subject"] = subject
     msg.set_content(body)
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+    with smtplib.SMTP("smtp.office365.com", 587) as smtp:
+        smtp.starttls()
         smtp.login(os.environ["EMAIL_ADDRESS"], os.environ["EMAIL_PASSWORD"])
         smtp.send_message(msg)
 
-# ---------------- HOME / SIGNUP ----------------
+# ---------------- SIGNUP ----------------
 @app.route("/", methods=["GET", "POST"])
-def home():
+def signup():
     msg = ""
-
     if request.method == "POST":
-        password = hashlib.sha256(request.form["password"].encode()).hexdigest()
-
+        pw = hashlib.sha256(request.form["password"].encode()).hexdigest()
         try:
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute("""
-            INSERT INTO users (name, age, gender, email, password)
-            VALUES (?, ?, ?, ?, ?)
-            """, (
-                request.form["name"],
-                request.form["age"],
-                request.form["gender"],
-                request.form["email"],
-                password
-            ))
-            conn.commit()
-
-            send_email(
-                request.form["email"],
-                "Verify your account",
-                f"Welcome {request.form['name']}! Your account was created successfully."
+            con = db()
+            con.execute(
+                "INSERT INTO users (name,email,password) VALUES (?,?,?)",
+                (request.form["name"], request.form["email"], pw)
             )
-
-            msg = f"Welcome {request.form['name']}! Your account is ready 🎉"
-
+            con.commit()
+            con.close()
+            msg = request.form["name"]
         except:
-            msg = "Email already exists."
+            msg = "exists"
 
     return render_template_string("""
 <!DOCTYPE html>
 <html>
 <head>
-<title>Jiya's Reading Diary</title>
-
 <style>
-:root {
-    --bg:#33003D;
-    --box:#22002A;
-    --text:#FF914D;
-    --accent:#ffde59;
-}
-
-body {
-    background-image:url("/static/Book2.png");
-    font-family:cursive;
-    text-align:center;
-}
-
-.text-box {
-    width:900px;
-    margin:40px auto;
-    padding:40px;
-    background:var(--box);
-    border-radius:20px;
+body { background:url('/static/Book2.png'); font-family:cursive; text-align:center; }
+.box {
+    width:900px; margin:40px auto; padding:40px;
+    background:#22002A; border-radius:20px;
     border:4px solid transparent;
-    animation: glow 6s linear infinite;
-    box-shadow:0 0 30px rgba(255,145,77,.6);
+    animation:glow 6s infinite;
 }
-
 @keyframes glow {
-    0% {border-color:#ffde59;}
-    33% {border-color:#ff914d;}
-    66% {border-color:#b84dff;}
-    100% {border-color:#ffde59;}
+    0%{border-color:#ffde59;}
+    50%{border-color:#ff914d;}
+    100%{border-color:#b84dff;}
 }
-
-.field {
-    position:relative;
-    margin-bottom:25px;
+form.fade { animation:out 1s forwards; }
+@keyframes out { to{opacity:0;height:0;overflow:hidden;} }
+input,button {
+    width:100%; padding:15px; margin:10px;
+    border-radius:12px; border:none;
 }
-
-.field input {
-    width:100%;
-    padding:14px;
-    border-radius:12px;
-    border:2px solid var(--accent);
-    background:#4b005a;
-    color:var(--accent);
-}
-
-.field label {
-    position:absolute;
-    top:50%;
-    left:14px;
-    transform:translateY(-50%);
-    transition:.3s;
-    background:var(--box);
-    padding:0 6px;
-    color:var(--accent);
-}
-
-.field input:focus + label,
-.field input:not(:placeholder-shown) + label {
-    top:-8px;
-    font-size:12px;
-}
-
 button {
-    background:var(--accent);
-    padding:16px 40px;
-    border:none;
-    border-radius:20px;
-    font-size:18px;
-    cursor:pointer;
-    animation:btnGlow 3s infinite;
-    transition:.4s;
+    background:#ffde59; font-size:18px; cursor:pointer;
 }
-
-button:hover { transform:scale(1.1); }
-
-@keyframes btnGlow {
-    0% {box-shadow:0 0 10px #ffde59;}
-    50% {box-shadow:0 0 30px #ff914d;}
-    100% {box-shadow:0 0 10px #ffde59;}
-}
-
+a { color:#FF914D; }
 .success {
-    color:var(--text);
-    font-size:26px;
-    animation:fade 4s forwards;
+    font-size:28px; color:#FF914D; animation:fade 2s;
 }
-
-@keyframes fade {
-    0% {opacity:0;}
-    20% {opacity:1;}
-    80% {opacity:1;}
-    100% {opacity:0;}
-}
+@keyframes fade { from{opacity:0;} to{opacity:1;} }
 </style>
 </head>
-
 <body>
-<div class="text-box">
-<img src="/static/J.png">
 
-<p style="color:var(--text);font-size:22px;">
-Hello everyone and welcome to <b><i>Jiya's Reading Diary</i></b>!
-My name is Jiya and I am a passionate reader who loves books and would love to recommend some for you!
-</p>
+<div class="box">
+<h2 style="color:#FF914D">Jiya's Reading Diary</h2>
 
-<form method="post">
-<div class="field"><input name="name" required placeholder=" "><label>Name</label></div>
-<div class="field"><input type="number" name="age" required placeholder=" "><label>Age</label></div>
-<div class="field"><input name="gender" required placeholder=" "><label>Gender</label></div>
-<div class="field"><input type="email" name="email" required placeholder=" "><label>Email</label></div>
-<div class="field"><input type="password" name="password" required placeholder=" "><label>Password</label></div>
-
+{% if not msg %}
+<form method="post" id="form">
+<input name="name" placeholder="Name" required>
+<input name="email" type="email" placeholder="Email" required>
+<input name="password" type="password" placeholder="Password" required>
 <button>Let's Get Started!</button>
 </form>
+<a href="/login">Already have an account? Sign in</a>
 
-{% if msg %}
-<p class="success">{{msg}}</p>
+{% elif msg == "exists" %}
+<p class="success">Email already exists</p>
+
+{% else %}
+<p class="success">Welcome {{msg}}!</p>
 <div>
-<button>Fantasy</button>
-<button>Romance</button>
-<button>Mystery</button>
-<button>Sci-Fi</button>
-<button>Adventure</button>
+<button onclick="location.href='/login'">Fantasy</button>
+<button onclick="location.href='/login'">Romance</button>
+<button onclick="location.href='/login'">Mystery</button>
+<button onclick="location.href='/login'">Sci-Fi</button>
 </div>
+<script>
+document.getElementById("form")?.classList.add("fade");
+</script>
 {% endif %}
 
-<p style="color:var(--text);font-size:22px;"><b><i>Happy Reading!</i></b></p>
+<p style="color:#FF914D; font-size:22px;"><b><i>Happy Reading!</i></b></p>
 </div>
+
 </body>
 </html>
 """, msg=msg)
+
+# ---------------- LOGIN ----------------
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    msg = ""
+    if request.method == "POST":
+        pw = hashlib.sha256(request.form["password"].encode()).hexdigest()
+        con = db()
+        cur = con.cursor()
+        cur.execute(
+            "SELECT id FROM users WHERE email=? AND password=?",
+            (request.form["email"], pw)
+        )
+        user = cur.fetchone()
+        con.close()
+
+        if user:
+            session["user"] = user[0]
+            return redirect("/dashboard")
+        msg = "Invalid login"
+
+    return render_template_string("""
+<body style="background:#22002A;color:#FF914D;text-align:center;font-family:cursive;">
+<h2>Login</h2>
+<form method="post">
+<input name="email" placeholder="Email"><br>
+<input name="password" type="password" placeholder="Password"><br>
+<button>Login</button>
+</form>
+<a href="/reset">Forgot password?</a>
+<p>{{msg}}</p>
+</body>
+""", msg=msg)
+
+# ---------------- DASHBOARD ----------------
+@app.route("/dashboard")
+def dashboard():
+    if "user" not in session:
+        return redirect("/login")
+    return render_template_string("""
+<body style="display:flex;font-family:cursive;">
+<div style="width:200px;background:#33003D;color:#FF914D;padding:20px;">
+<a href="/profile">Profile</a><br><br>
+<a href="/diary">Write Diary</a><br><br>
+<a href="/logout">Logout</a>
+</div>
+<div style="flex:1;padding:40px;">
+<h2>Welcome to your Reading Diary</h2>
+</div>
+</body>
+""")
+
+# ---------------- DIARY ----------------
+@app.route("/diary", methods=["GET", "POST"])
+def diary():
+    if "user" not in session:
+        return redirect("/login")
+
+    if request.method == "POST":
+        con = db()
+        con.execute(
+            "INSERT INTO diary (user_id, genre, entry) VALUES (?, ?, ?)",
+            (session["user"], request.form["genre"], request.form["entry"])
+        )
+        con.commit()
+        con.close()
+
+    return render_template_string("""
+<body style="background:#22002A;color:#FF914D;font-family:cursive;text-align:center;">
+<h2>Write Diary Entry</h2>
+<form method="post">
+<select name="genre">
+<option>Fantasy</option>
+<option>Romance</option>
+<option>Mystery</option>
+<option>Sci-Fi</option>
+</select><br><br>
+<textarea name="entry" rows="6" cols="50"></textarea><br><br>
+<button>Save</button>
+</form>
+</body>
+""")
+
+# ---------------- PASSWORD RESET ----------------
+@app.route("/reset", methods=["GET", "POST"])
+def reset():
+    if request.method == "POST":
+        token = str(uuid.uuid4())
+        con = db()
+        con.execute(
+            "INSERT INTO reset_tokens (email, token) VALUES (?, ?)",
+            (request.form["email"], token)
+        )
+        con.commit()
+        con.close()
+
+        send_email(
+            request.form["email"],
+            "Password Reset",
+            f"Use this token to reset your password:\n\n{token}"
+        )
+
+        return "<p style='color:#FF914D'>Password reset email sent.</p>"
+
+    return """
+<body style="background:#22002A;color:#FF914D;text-align:center;font-family:cursive;">
+<h2>Password Reset</h2>
+<form method="post">
+<input name="email" placeholder="Your email">
+<button>Send reset email</button>
+</form>
+</body>
+"""
+
+# ---------------- LOGOUT ----------------
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
