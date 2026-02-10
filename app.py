@@ -1,12 +1,12 @@
-from flask import Flask, render_template_string, request, redirect, session
+from flask import Flask, render_template_string, request, redirect, session, url_for
 import sqlite3
 import hashlib
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static")
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
-# ---------- FORCE NO CACHING ----------
+# ---------- NO CACHE ----------
 @app.after_request
 def add_header(response):
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -34,13 +34,14 @@ def init_db():
 init_db()
 
 # ---------- BASE TEMPLATE ----------
-BASE_START = """
+def base_start():
+    return f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <title>Jiya’s Reading Diary</title>
-    <link rel="stylesheet" href="/static/style.css?v=1">
+    <link rel="stylesheet" href="{url_for('static', filename='style.css')}">
 </head>
 <body>
 """
@@ -57,9 +58,9 @@ def home():
 
     if not user:
         return render_template_string(
-            BASE_START + """
+            base_start() + """
             <div style="max-width:900px;margin:90px auto;text-align:center;" class="glow-box">
-                <img src="/static/J.png" width="300"><br><br>
+                <img src="{{ url_for('static', filename='J.png') }}" width="300"><br><br>
 
                 <h2>Welcome to Jiya’s Reading Diary</h2>
 
@@ -81,7 +82,7 @@ def home():
         )
 
     return render_template_string(
-        BASE_START + """
+        base_start() + """
         <div class="layout">
             <div class="sidebar">
                 <a href="/profile">👤 Profile</a>
@@ -93,7 +94,7 @@ def home():
 
             <div class="content">
                 <div class="glow-box" style="max-width:850px;text-align:center;">
-                    <img src="/static/J.png" width="300"><br><br>
+                    <img src="{{ url_for('static', filename='J.png') }}" width="300"><br><br>
 
                     <h2>Account successfully created!</h2>
                     <h3>Welcome {{ user }}!</h3>
@@ -111,7 +112,7 @@ def home():
         user=user
     )
 
-# ---------- SIGN UP ----------
+# ---------- SIGNUP ----------
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
@@ -131,7 +132,7 @@ def signup():
         return redirect("/")
 
     return render_template_string(
-        BASE_START + """
+        base_start() + """
         <div style="max-width:520px;margin:90px auto;" class="glow-box">
             <h2>Create an Account</h2>
 
@@ -152,30 +153,22 @@ def signup():
         """ + BASE_END
     )
 
-# ---------- GENRES ----------
-@app.route("/genres")
-def genres():
-    return redirect("/")
-
+# ---------- OTHER ROUTES ----------
 @app.route("/genre/<genre>")
 def genre_page(genre):
     return render_template_string(
-        BASE_START + f"""
+        base_start() + f"""
         <div style="max-width:900px;margin:90px auto;" class="glow-box">
             <h1>{genre}</h1>
-            <p>
-                Curated book reviews for the {genre} genre will appear here.
-                Readers explore reviews without typing anything.
-            </p>
+            <p>Curated book reviews appear here.</p>
         </div>
         """ + BASE_END
     )
 
-# ---------- STORY ----------
 @app.route("/story")
 def story():
     return render_template_string(
-        BASE_START + """
+        base_start() + """
         <div style="max-width:900px;margin:90px auto;" class="glow-box">
             <h1>Make Your Own Story</h1>
             <textarea rows="14" placeholder="Begin your story here..."></textarea>
@@ -183,14 +176,12 @@ def story():
         """ + BASE_END
     )
 
-# ---------- PLACEHOLDERS ----------
 @app.route("/profile")
 def profile():
     return render_template_string(
-        BASE_START + """
+        base_start() + """
         <div style="max-width:600px;margin:90px auto;" class="glow-box">
             <h2>Profile Page</h2>
-            <p>Profile features coming soon.</p>
         </div>
         """ + BASE_END
     )
@@ -198,10 +189,9 @@ def profile():
 @app.route("/settings")
 def settings():
     return render_template_string(
-        BASE_START + """
+        base_start() + """
         <div style="max-width:600px;margin:90px auto;" class="glow-box">
             <h2>Settings</h2>
-            <p>Customization options coming soon.</p>
         </div>
         """ + BASE_END
     )
@@ -211,6 +201,5 @@ def logout():
     session.clear()
     return redirect("/")
 
-# ---------- RUN ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
