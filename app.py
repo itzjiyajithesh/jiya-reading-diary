@@ -1,10 +1,10 @@
-from flask import Flask, render_template_string, request, redirect, url_for, session
+from flask import Flask, render_template_string, request, redirect, session, url_for
 import sqlite3, hashlib, os
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key")
 
-# ---------- DATABASE ----------
+# ---------------- DATABASE ----------------
 def db():
     return sqlite3.connect("users.db")
 
@@ -23,185 +23,217 @@ def init_db():
 
 init_db()
 
-# ---------- MAIN PAGE ----------
-@app.route("/")
-def home():
-    logged_in = "user" in session
-    return render_template_string("""
-<!DOCTYPE html>
-<html>
-<head>
-<title>Jiya's Reading Diary</title>
+# ---------------- STYLES (SHARED) ----------------
+BASE_STYLE = """
 <style>
 body{
     background:url('/static/Book2.png');
     background-size:cover;
     font-family:cursive;
-    text-align:center;
     color:#FF914D;
+    margin:0;
 }
-.container{
-    margin-top:80px;
+.glow-box{
+    background:rgba(30,0,40,0.9);
+    border-radius:25px;
+    padding:40px;
+    animation:glowBorder 6s infinite;
+}
+@keyframes glowBorder{
+    0%{box-shadow:0 0 15px #ffde59;}
+    50%{box-shadow:0 0 35px #ff914d;}
+    100%{box-shadow:0 0 15px #b84dff;}
 }
 .glow-btn{
-    padding:20px 50px;
-    font-size:26px;
+    padding:18px 45px;
+    font-size:24px;
     border:none;
-    border-radius:25px;
+    border-radius:30px;
     cursor:pointer;
     background:#ffde59;
-    animation:glow 2.5s infinite;
+    transition:transform 0.3s, box-shadow 0.3s;
 }
-@keyframes glow{
-    0%{box-shadow:0 0 10px #ffde59;}
-    50%{box-shadow:0 0 30px #ff914d;}
-    100%{box-shadow:0 0 10px #ffde59;}
+.glow-btn:hover{
+    transform:scale(1.1);
+    box-shadow:0 0 30px #ff914d;
+}
+input, textarea{
+    width:100%;
+    padding:15px;
+    margin:12px 0;
+    border-radius:14px;
+    border:2px solid transparent;
+    background:#3a004d;
+    color:#ffde59;
+}
+input:focus, textarea:focus{
+    outline:none;
+    border-color:#ffde59;
+    box-shadow:0 0 15px #ffde59;
+}
+.sidebar{
+    width:240px;
+    background:#22002A;
+    padding:25px;
+    height:100vh;
+}
+.sidebar a{
+    display:block;
+    color:#FF914D;
+    text-decoration:none;
+    margin:15px 0;
+    font-size:18px;
+}
+.center{
+    padding:60px;
+    flex:1;
 }
 .genre-btn{
-    margin:10px;
-    padding:15px 30px;
-    border-radius:20px;
+    margin:12px;
+    padding:16px 32px;
+    border-radius:22px;
     border:none;
     background:#ffde59;
     font-size:18px;
     cursor:pointer;
+    transition:transform 0.3s, box-shadow 0.3s;
+}
+.genre-btn:hover{
+    transform:scale(1.1);
+    box-shadow:0 0 25px #ff914d;
 }
 </style>
-</head>
+"""
 
+# ---------------- MAIN PAGE ----------------
+@app.route("/")
+def home():
+    user = session.get("user")
+    return render_template_string("""
+<!DOCTYPE html>
+<html>
+<head>{{style}}</head>
 <body>
-<div class="container">
-    <img src="/static/J.png" width="180"><br><br>
-
-    {% if not logged_in %}
-        <button class="glow-btn" onclick="location.href='/signup'">
-            Let’s Get Started!
-        </button>
-    {% else %}
-        <h2>Select a Genre</h2>
-        <button class="genre-btn" onclick="location.href='/genre/Fantasy'">Fantasy</button>
-        <button class="genre-btn" onclick="location.href='/genre/Romance'">Romance</button>
-        <button class="genre-btn" onclick="location.href='/genre/Mystery'">Mystery</button>
-        <button class="genre-btn" onclick="location.href='/genre/Sci-Fi'">Sci-Fi</button>
-        <button class="genre-btn" onclick="location.href='/genre/Adventure'">Adventure</button>
-    {% endif %}
+{% if not user %}
+<div style="max-width:900px;margin:80px auto;text-align:center;" class="glow-box">
+    <img src="/static/J.png" width="260"><br><br>
+    <h2>Welcome to Jiya’s Reading Diary</h2>
+    <p>
+        This is a personal reading space where stories live, genres unfold,
+        and readers discover worlds through books.<br><br>
+        Founded by Jiya, this app is built for thoughtful readers who love
+        reflection, imagination, and storytelling.
+    </p><br>
+    <button class="glow-btn" onclick="location.href='/signup'">
+        Let’s Get Started!
+    </button>
 </div>
+{% else %}
+<div style="display:flex;">
+    <div class="sidebar">
+        <a href="/profile">👤 Profile</a>
+        <a href="/genres">📚 Genres</a>
+        <a href="/story">✍ Make Your Own Story</a>
+        <a href="/settings">⚙ Settings</a>
+        <a href="/logout">🚪 Logout</a>
+    </div>
+    <div class="center">
+        <div class="glow-box" style="max-width:800px;margin:auto;text-align:center;">
+            <img src="/static/J.png" width="260"><br><br>
+            <h2>Account successfully created!</h2>
+            <h3>Welcome {{user}}!</h3><br>
+            <button class="genre-btn" onclick="location.href='/genre/Fantasy'">Fantasy</button>
+            <button class="genre-btn" onclick="location.href='/genre/Romance'">Romance</button>
+            <button class="genre-btn" onclick="location.href='/genre/Mystery'">Mystery</button>
+            <button class="genre-btn" onclick="location.href='/genre/Sci-Fi'">Sci-Fi</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 </body>
 </html>
-""", logged_in=logged_in)
+""", user=user, style=BASE_STYLE)
 
-# ---------- SIGNUP ----------
+# ---------------- SIGNUP ----------------
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
     if request.method == "POST":
         pw = hashlib.sha256(request.form["password"].encode()).hexdigest()
-        try:
-            con = db()
-            con.execute(
-                "INSERT INTO users (name,email,password) VALUES (?,?,?)",
-                (request.form["name"], request.form["email"], pw)
-            )
-            con.commit()
-            con.close()
-            session["user"] = request.form["email"]
-            return redirect("/")
-        except:
-            pass
-
+        con = db()
+        con.execute(
+            "INSERT INTO users (name,email,password) VALUES (?,?,?)",
+            (request.form["name"], request.form["email"], pw)
+        )
+        con.commit()
+        con.close()
+        session["user"] = request.form["name"]
+        return redirect("/")
     return render_template_string("""
 <!DOCTYPE html>
 <html>
-<head>
-<style>
-body{
-    background:#22002A;
-    font-family:cursive;
-    text-align:center;
-    color:#FF914D;
-}
-.box{
-    width:500px;
-    margin:80px auto;
-    padding:40px;
-    border-radius:20px;
-    background:#33003D;
-    animation:borderGlow 6s infinite;
-}
-@keyframes borderGlow{
-    0%{box-shadow:0 0 15px #ffde59;}
-    50%{box-shadow:0 0 30px #ff914d;}
-    100%{box-shadow:0 0 15px #ffde59;}
-}
-input,button{
-    width:100%;
-    padding:14px;
-    margin:10px 0;
-    border-radius:12px;
-    border:none;
-}
-button{
-    background:#ffde59;
-    font-size:18px;
-    cursor:pointer;
-}
-</style>
-</head>
+<head>{{style}}</head>
 <body>
-<div class="box">
-    <img src="/static/J.png" width="120"><br><br>
+<div style="max-width:500px;margin:80px auto;" class="glow-box">
     <h2>Create an Account</h2>
     <form method="post">
         <input name="name" placeholder="Name" required>
         <input name="email" type="email" placeholder="Email" required>
         <input name="password" type="password" placeholder="Password" required>
-        <button>Create Account</button>
+        <button class="glow-btn">Submit</button>
     </form>
+    <p style="margin-top:15px;">
+        If you already have an account,
+        <a href="/">Sign In</a>
+    </p>
 </div>
 </body>
 </html>
-""")
+""", style=BASE_STYLE)
 
-# ---------- GENRE PAGE ----------
+# ---------------- GENRE PAGE ----------------
 @app.route("/genre/<genre>")
-def genre_page(genre):
-    if "user" not in session:
-        return redirect("/")
+def genre(genre):
     return render_template_string("""
 <!DOCTYPE html>
 <html>
-<head>
-<style>
-body{
-    background:#22002A;
-    color:#FF914D;
-    font-family:cursive;
-    text-align:center;
-}
-.box{
-    width:800px;
-    margin:60px auto;
-    padding:40px;
-    background:#33003D;
-    border-radius:20px;
-}
-textarea{
-    width:100%;
-    height:200px;
-    border-radius:12px;
-    padding:15px;
-}
-</style>
-</head>
+<head>{{style}}</head>
 <body>
-<div class="box">
+<div style="max-width:900px;margin:80px auto;" class="glow-box">
     <h1>{{genre}}</h1>
-    <p>Write your book review here:</p>
-    <textarea placeholder="Your review..."></textarea>
+    <p>Curated book reviews will appear here for readers to explore.</p>
 </div>
 </body>
 </html>
-""", genre=genre)
+""", genre=genre, style=BASE_STYLE)
 
-# ---------- RUN ----------
+# ---------------- STORY PAGE ----------------
+@app.route("/story")
+def story():
+    return render_template_string("""
+<!DOCTYPE html>
+<html>
+<head>{{style}}</head>
+<body>
+<div style="max-width:900px;margin:80px auto;" class="glow-box">
+    <h1>Make Your Own Story</h1>
+    <textarea placeholder="Begin your story here..."></textarea>
+</div>
+</body>
+</html>
+""", style=BASE_STYLE)
+
+# ---------------- PLACEHOLDERS ----------------
+@app.route("/profile")
+def profile(): return "<h2>Profile page coming soon</h2>"
+
+@app.route("/settings")
+def settings(): return "<h2>Settings page coming soon</h2>"
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/")
+
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
