@@ -6,6 +6,14 @@ import os
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
 
+# ---------- FORCE NO CACHING ----------
+@app.after_request
+def add_header(response):
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 # ---------- DATABASE ----------
 def get_db():
     return sqlite3.connect("users.db")
@@ -25,13 +33,14 @@ def init_db():
 
 init_db()
 
-# ---------- BASE HTML ----------
+# ---------- BASE TEMPLATE ----------
 BASE_START = """
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8">
     <title>Jiya’s Reading Diary</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=1">
 </head>
 <body>
 """
@@ -143,7 +152,11 @@ def signup():
         """ + BASE_END
     )
 
-# ---------- GENRE PAGE ----------
+# ---------- GENRES ----------
+@app.route("/genres")
+def genres():
+    return redirect("/")
+
 @app.route("/genre/<genre>")
 def genre_page(genre):
     return render_template_string(
@@ -151,8 +164,8 @@ def genre_page(genre):
         <div style="max-width:900px;margin:90px auto;" class="glow-box">
             <h1>{genre}</h1>
             <p>
-                Book reviews for the {genre} genre will appear here.
-                Readers can explore curated opinions and summaries.
+                Curated book reviews for the {genre} genre will appear here.
+                Readers explore reviews without typing anything.
             </p>
         </div>
         """ + BASE_END
@@ -165,8 +178,7 @@ def story():
         BASE_START + """
         <div style="max-width:900px;margin:90px auto;" class="glow-box">
             <h1>Make Your Own Story</h1>
-
-            <textarea rows="12" placeholder="Begin your story here..."></textarea>
+            <textarea rows="14" placeholder="Begin your story here..."></textarea>
         </div>
         """ + BASE_END
     )
@@ -174,15 +186,25 @@ def story():
 # ---------- PLACEHOLDERS ----------
 @app.route("/profile")
 def profile():
-    return "Profile page coming soon."
+    return render_template_string(
+        BASE_START + """
+        <div style="max-width:600px;margin:90px auto;" class="glow-box">
+            <h2>Profile Page</h2>
+            <p>Profile features coming soon.</p>
+        </div>
+        """ + BASE_END
+    )
 
 @app.route("/settings")
 def settings():
-    return "Settings page coming soon."
-
-@app.route("/genres")
-def genres():
-    return redirect("/")
+    return render_template_string(
+        BASE_START + """
+        <div style="max-width:600px;margin:90px auto;" class="glow-box">
+            <h2>Settings</h2>
+            <p>Customization options coming soon.</p>
+        </div>
+        """ + BASE_END
+    )
 
 @app.route("/logout")
 def logout():
