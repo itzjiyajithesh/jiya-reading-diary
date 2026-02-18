@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Verify Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container">
+    <h1>Verification Required</h1>
+<p>
+We have sent a verification code to <strong>{{ masked_email }}</strong>.
+Please check your inbox and spam folder.
+</p>
+
+<form method="POST" action="/verify">
+    <input type="text" name="code" placeholder="Enter verification code" required>
+    <button type="submit">Verify</button>
+</form>
+
+</div>
+
+</body>
+</html>
