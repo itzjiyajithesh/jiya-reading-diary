@@ -1,7 +1,7 @@
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, render_template, request, redirect, session
 import sqlite3
-import os
 import hashlib
+import os
 
 app = Flask(__name__)
 app.secret_key = "secret123"
@@ -53,7 +53,10 @@ def signup():
 
         name = request.form["name"]
         email = request.form["email"]
-        password = hashlib.sha256(request.form["password"].encode()).hexdigest()
+
+        password = hashlib.sha256(
+            request.form["password"].encode()
+        ).hexdigest()
 
         con = get_db()
         cur = con.cursor()
@@ -61,18 +64,22 @@ def signup():
         try:
             cur.execute(
                 "INSERT INTO users (name,email,password) VALUES (?,?,?)",
-                (name, email, password),
+                (name, email, password)
             )
             con.commit()
 
-        except:
-            return "Email already exists"
+        except sqlite3.IntegrityError:
+            return "Email already exists."
 
-        cur.execute("SELECT id FROM users WHERE email=?", (email,))
+        cur.execute(
+            "SELECT id,name FROM users WHERE email=?",
+            (email,)
+        )
+
         user = cur.fetchone()
 
         session["user_id"] = user[0]
-        session["name"] = name
+        session["name"] = user[1]
 
         return redirect("/main")
 
@@ -85,14 +92,17 @@ def login():
     if request.method == "POST":
 
         email = request.form["email"]
-        password = hashlib.sha256(request.form["password"].encode()).hexdigest()
+
+        password = hashlib.sha256(
+            request.form["password"].encode()
+        ).hexdigest()
 
         con = get_db()
         cur = con.cursor()
 
         cur.execute(
             "SELECT id,name FROM users WHERE email=? AND password=?",
-            (email, password),
+            (email, password)
         )
 
         user = cur.fetchone()
@@ -113,7 +123,10 @@ def main():
     if "user_id" not in session:
         return redirect("/login")
 
-    return render_template("main.html", name=session["name"])
+    return render_template(
+        "main.html",
+        name=session["name"]
+    )
 
 
 @app.route("/story", methods=["GET", "POST"])
@@ -131,19 +144,22 @@ def story():
 
         cur.execute(
             "INSERT INTO stories (user_id,content) VALUES (?,?)",
-            (session["user_id"], content),
+            (session["user_id"], content)
         )
 
         con.commit()
 
     cur.execute(
         "SELECT content FROM stories WHERE user_id=?",
-        (session["user_id"],),
+        (session["user_id"],)
     )
 
     stories = cur.fetchall()
 
-    return render_template("story.html", stories=stories)
+    return render_template(
+        "story.html",
+        stories=stories
+    )
 
 
 @app.route("/logout")
@@ -154,5 +170,10 @@ def logout():
 
 
 if __name__ == "__main__":
+
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
