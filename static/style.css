@@ -1,0 +1,53 @@
+body{
+background-image:url("/static/Book2.png");
+background-size:cover;
+font-family:cursive;
+margin:0;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+}
+
+.box{
+width:800px;
+padding:40px;
+background:#22002a;
+border-radius:20px;
+border:4px solid;
+animation:borderGlow 6s infinite linear;
+text-align:center;
+color:#ff914d;
+}
+
+@keyframes borderGlow{
+0%{border-color:#ffde59;}
+33%{border-color:#ff914d;}
+66%{border-color:#b84dff;}
+100%{border-color:#ffde59;}
+}
+
+input,textarea{
+width:90%;
+padding:12px;
+margin:10px;
+border-radius:12px;
+border:2px solid gold;
+background:#4b005a;
+color:#fff;
+}
+
+button{
+padding:15px 30px;
+background:#ffde59;
+border:none;
+border-radius:20px;
+font-size:18px;
+cursor:pointer;
+transition:0.3s;
+}
+
+button:hover{
+transform:scale(1.1);
+box-shadow:0 0 20px #ffde59;
+}
