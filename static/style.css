@@ -1,8 +1,31 @@
 body{
 background-image:url("/static/Book2.png");
 background-size:cover;
-font-family:cursive;
 margin:0;
+font-family:Georgia;
+}
+
+.toolbar{
+position:fixed;
+right:0;
+top:0;
+height:100%;
+width:180px;
+background:#000000aa;
+display:flex;
+flex-direction:column;
+padding:20px;
+}
+
+.toolbar a{
+color:white;
+text-decoration:none;
+margin:15px 0;
+font-size:18px;
+}
+
+.content{
+margin-right:200px;
 display:flex;
 justify-content:center;
 align-items:center;
@@ -10,44 +33,53 @@ height:100vh;
 }
 
 .box{
-width:800px;
+
+background:rgba(60,0,80,0.65);
 padding:40px;
-background:#22002a;
 border-radius:20px;
+
 border:4px solid;
-animation:borderGlow 6s infinite linear;
+animation:borderGlow 6s linear infinite;
+
 text-align:center;
+width:700px;
 color:#ff914d;
 }
 
+.logo{
+width:260px;
+margin-bottom:20px;
+}
+
 @keyframes borderGlow{
+
 0%{border-color:#ffde59;}
 33%{border-color:#ff914d;}
 66%{border-color:#b84dff;}
 100%{border-color:#ffde59;}
+
 }
 
-input,textarea{
-width:90%;
-padding:12px;
+.genrebtn{
+
+padding:15px 25px;
 margin:10px;
-border-radius:12px;
-border:2px solid gold;
-background:#4b005a;
-color:#fff;
-}
 
-button{
-padding:15px 30px;
 background:#ffde59;
 border:none;
+
 border-radius:20px;
-font-size:18px;
-cursor:pointer;
+
+font-size:16px;
+
 transition:0.3s;
+cursor:pointer;
 }
 
-button:hover{
-transform:scale(1.1);
+.genrebtn:hover{
+
+transform:scale(1.15);
+
 box-shadow:0 0 20px #ffde59;
+
 }
